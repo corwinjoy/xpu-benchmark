@@ -1,22 +1,8 @@
 // Approximation of Pi using a simple, and not optimized, CUDA program
 // Copyleft Alessandro Re
+// https://gist.github.com/akiross/17e722c5bea92bd2c310324eac643df6
 //
-// GCC 6.x not supported by CUDA 8, I used compat version
-//
-// nvcc -std=c++11 -ccbin=gcc5 pigreco.cu -c
-// g++5 pigreco.o -lcudart -L/usr/local/cuda/lib64 -o pigreco
-//
-// This code is basically equivalent to the following Python code:
-//
-// def pigreco(NUM):
-//     from random import random as rand
-//     def sqrad():
-//         x, y = rand(), rand()
-//         return x*x + y*y
-//     return 4 * sum(1 - int(test()) for _ in range(NUM)) / NUM
-//
-// Python version takes, on this machine, 3.5 seconds to compute 10M tests
-// CUDA version takes, on this machine, 1.6 seconds to compute 20.48G tests
+// Updated to add timers, Corwin Joy
 //
 #include <iostream>
 #include <limits>
