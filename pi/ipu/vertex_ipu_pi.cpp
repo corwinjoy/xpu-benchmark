@@ -1,7 +1,5 @@
 // Copyright (c) 2022 Graphcore Ltd. All rights reserved.
 
-#include "pi_options.hpp"
-
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
@@ -40,6 +38,7 @@ using ::poplar::program::Execute;
 
 static const auto MAX_TENSOR_SIZE = 55000000ul;
 
+// Find hardware IPU
 auto getIpuDevice(const unsigned int numIpus = 1) -> optional<Device> {
     DeviceManager manager = DeviceManager::createDeviceManager();
     optional<Device> device = std::nullopt;
@@ -56,10 +55,23 @@ auto getIpuDevice(const unsigned int numIpus = 1) -> optional<Device> {
     return device;
 }
 
+// Return simulated IPU
+auto getIpuModel(const unsigned int numIpus = 1, int tilesPerIpu = 2) -> optional<Device> {
+    optional<Device> device = std::nullopt;
+    poplar::IPUModel ipuModel;
+    ipuModel.numIPUs = numIpus;
+    ipuModel.tilesPerIPU = tilesPerIpu;
+    device = ipuModel.createDevice();
+    return device;
+}
+
 auto createGraphAndAddCodelets(const optional<Device> &device) -> Graph {
     auto graph = poplar::Graph(device->getTarget());
-
-    graph.addCodelets({"pi_vertex.cpp"}, "-O3");
+#ifdef SIMULATED_IPU
+    graph.addCodelets({"../pi_vertex.cpp"}, "-O3 -DSIMULATED_IPU");
+#else
+    graph.addCodelets({"../pi_vertex.cpp"}, "-O3");
+#endif
     return graph;
 }
 
@@ -78,13 +90,24 @@ auto captureProfileInfo(Engine &engine) {
     executionOfs.open("execution.json", std::ofstream::out | std::ofstream::trunc);
 }
 
+
 int main(int argc, char *argv[]) {
-    pi_options options = parse_options(argc, argv, "IPU PI Iterative");
+    struct pi_options {
+        unsigned long iterations = 30000; // 30000000
+        unsigned int num_ipus = 1;
+        int precision = 10;
+    } options;
+
     auto precision = options.precision;
     auto iterations = options.iterations;
 
     std::cout << "STEP 1: Connecting to an IPU device" << std::endl;
+#ifdef SIMULATED_IPU
+    auto device = getIpuModel(options.num_ipus);  // Simulated IPU
+#else
     auto device = getIpuDevice(options.num_ipus);
+#endif
+
     if (!device.has_value()) {
         std::cerr << "Could not attach to an IPU device. Aborting" << std::endl;
         return EXIT_FAILURE;

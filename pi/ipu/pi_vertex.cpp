@@ -1,10 +1,17 @@
 // Copyright (c) 2022 Graphcore Ltd. All rights reserved.
 
 #include <poplar/Vertex.hpp>
-#include <ipudef.h>
 #include <climits>
 #include <print.h>
 #include <math.h>
+
+#ifdef SIMULATED_IPU
+    #include <random>
+    std::default_random_engine generator;
+    std::uniform_real_distribution<float> distribution(0.0,1.0);
+#else
+    #include <ipudef.h>
+#endif
 
 using namespace poplar;
 
@@ -17,8 +24,15 @@ public:
     auto compute(unsigned i) -> bool {
         int count = 0;
         for (auto i = 0; i < iterations; i++) {
-            auto x = (float)__builtin_ipu_urand32() / (float)UINT_MAX;
-            auto y = (float)__builtin_ipu_urand32() / (float)UINT_MAX;
+#ifdef SIMULATED_IPU
+            float x = distribution(generator);
+            float y = distribution(generator);
+#else
+            float x = (float)__builtin_ipu_urand32() / (float)UINT_MAX;
+            float y = (float)__builtin_ipu_urand32() / (float)UINT_MAX;
+#endif
+
+
 
             auto val = x * x + y * y;
             count +=  val < 1.f;

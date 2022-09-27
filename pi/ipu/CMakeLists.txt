@@ -1,19 +1,19 @@
-macro(add_benchmark)
-        set(singleValue NAME)
-        set(multipleValues SOURCES)
-        cmake_parse_arguments(local "" "${singleValue}" "${multipleValues}" ${ARGN})
+add_definitions(-DSIMULATED_IPU)
 
-        add_executable(${local_NAME} ${local_SOURCES})
-        target_link_libraries(${local_NAME} boost_program_options poplar poputil popops poprand)
-endmacro()
+cmake_minimum_required(VERSION 3.10)
+project(MonteCarloPIEstimation)
+set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_benchmark(
-        NAME iterative_ipu_pi
-        SOURCES iterative_ipu_pi.cpp)
-add_benchmark(
-        NAME poplibs_ipu_pi
-        SOURCES poplibs_ipu_pi.cpp)
-add_benchmark(
-        NAME vertex_ipu_pi
-        SOURCES vertex_ipu_pi.cpp)
+if(CMAKE_COMPILER_IS_GNUCXX)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -ansi -Wno-deprecated")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Wall -ansi -Wno-deprecated -march=native -mtune=native -O3")
+endif()
+
+find_package(poplar REQUIRED)
+
+add_executable(vertex_ipu_pi vertex_ipu_pi.cpp)
+target_link_libraries(vertex_ipu_pi poplar poputil popops poprand)
 
