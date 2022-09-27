@@ -14,15 +14,16 @@
 #include <poputil/TileMapping.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/Program.hpp>
+#include <poplar/Type.hpp>
+
+#include "count_type.h"
+auto CountVertex = ::poplar::equivalent_device_type<Count>().value;
 
 using ::std::map;
 using ::std::vector;
 using ::std::string;
 using ::std::optional;
 
-using ::poplar::BOOL;
-using ::poplar::FLOAT;
-using ::poplar::UNSIGNED_INT;
 using ::poplar::OptionFlags;
 using ::poplar::Tensor;
 using ::poplar::Graph;
@@ -37,6 +38,8 @@ using ::poplar::program::Repeat;
 using ::poplar::program::Execute;
 
 static const auto MAX_TENSOR_SIZE = 55000000ul;
+
+
 
 // Find hardware IPU
 auto getIpuDevice(const unsigned int numIpus = 1) -> optional<Device> {
@@ -68,9 +71,9 @@ auto getIpuModel(const unsigned int numIpus = 1, int tilesPerIpu = 2) -> optiona
 auto createGraphAndAddCodelets(const optional<Device> &device) -> Graph {
     auto graph = poplar::Graph(device->getTarget());
 #ifdef SIMULATED_IPU
-    graph.addCodelets({"../pi_vertex.cpp"}, "-O3 -DSIMULATED_IPU");
+    graph.addCodelets({"../pi_vertex.cpp"}, "-O3 -DSIMULATED_IPU -I..");
 #else
-    graph.addCodelets({"../pi_vertex.cpp"}, "-O3");
+    graph.addCodelets({"../pi_vertex.cpp"}, "-O3 -I..");
 #endif
     return graph;
 }
@@ -93,7 +96,7 @@ auto captureProfileInfo(Engine &engine) {
 
 int main(int argc, char *argv[]) {
     struct pi_options {
-        unsigned long iterations = 30000; // 30000000
+        unsigned long iterations = 30000000; // 30000000
         unsigned int num_ipus = 1;
         int precision = 10;
     } options;
@@ -118,11 +121,11 @@ int main(int argc, char *argv[]) {
 
     std::cout << "STEP 4: Define data streams" << std::endl;
     size_t numTiles = device->getTarget().getNumTiles();
-    auto fromIpuStream = graph.addDeviceToHostFIFO("FROM_IPU", UNSIGNED_INT, numTiles * 6);
+    auto fromIpuStream = graph.addDeviceToHostFIFO("FROM_IPU", CountVertex, 1);
 
     std::cout << "STEP 3: Building the compute graph" << std::endl;
-    auto counts = graph.addVariable(UNSIGNED_INT, {numTiles * 6}, "counts");
-    poputil::mapTensorLinearly(graph, counts);
+    auto counts = graph.addVariable(CountVertex, {numTiles * 6}, "counts");
+     poputil::mapTensorLinearly(graph, counts);
 
     const auto NumElemsPerTile = iterations / (numTiles * 6);
     auto cs = graph.addComputeSet("loopBody");
@@ -138,7 +141,27 @@ int main(int argc, char *argv[]) {
         graph.setPerfEstimate(v, 10); // Ideally you'd get this as right as possible
         graph.setTileMapping(v, tileNum);
     }
- 
+
+
+    // Create a compute set to reduce the hits from each tile to a single sum
+    auto sum_counts = graph.addVariable(CountVertex, {1}, "sum_counts");
+    auto reduceCS = graph.addComputeSet("reduceCS");
+
+    // Reduce the output set. Just use one tile.
+    for (unsigned tile = 0; tile < 1; ++tile) {
+        auto v = graph.addVertex(reduceCS, "ReduceVertex",
+                                 {{"in", counts}, {"out", sum_counts[tile]}});
+        graph.setTileMapping(v, tile);
+        graph.setTileMapping(sum_counts, tile);
+        graph.setPerfEstimate(v, 5);
+    }
+
+    // The program consists of executing the simulation followed by
+    // summing all the counts with a reduction
+
+    Sequence prog({Execute(cs), Execute(reduceCS), Copy(sum_counts, fromIpuStream)});
+
+
     std::cout << "STEP 5: Create engine and compile graph" << std::endl;
     auto ENGINE_OPTIONS = OptionFlags{
             {"target.saveArchive",                "archive.a"},
@@ -152,22 +175,26 @@ int main(int argc, char *argv[]) {
             {"autoReport.outputSerializedGraph",  "true"},
             {"debug.retainDebugInformation",      "true"}
     };
-    auto engine = Engine(graph, Sequence({Execute(cs), Copy(counts, fromIpuStream)}), ENGINE_OPTIONS);
+
+    auto engine = Engine(graph, prog, ENGINE_OPTIONS);
         
     std::cout << "STEP 6: Load compiled graph onto the IPU tiles" << std::endl;
     engine.load(*device);
     engine.enableExecutionProfiling();
 
     std::cout << "STEP 7: Attach data streams" << std::endl;
-    auto results = std::vector<unsigned int>(numTiles * 6);
+    auto results = std::vector<Count>(1);
     engine.connectStream("FROM_IPU", results.data(), results.data() + results.size());
 
     std::cout << "STEP 8: Run programs" << std::endl;
-    auto hits = 0ull;
     
     auto start = std::chrono::steady_clock::now();
     engine.run(0, "main"); // Main program
     auto stop = std::chrono::steady_clock::now();
+
+    std::cout << "Results size: " << results.size() << std::endl;
+
+    auto hits = 0ull;
     for (size_t i = 0; i < results.size(); i++) {
         hits += results[i];
     }

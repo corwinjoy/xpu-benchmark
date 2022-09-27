@@ -5,6 +5,8 @@
 #include <print.h>
 #include <math.h>
 
+#include "count_type.h"
+
 #ifdef SIMULATED_IPU
     #include <random>
     std::default_random_engine generator;
@@ -15,10 +17,11 @@
 
 using namespace poplar;
 
+
 class PiVertex : public MultiVertex {
 
 public:
-    Output<Vector<unsigned int>> hits;
+    Output<Vector<Count>> hits;
     int iterations;
 
     auto compute(unsigned i) -> bool {
@@ -41,3 +44,18 @@ public:
     }
 };
 
+// A vertex type to sum up a set of inputs.
+class ReduceVertex : public Vertex {
+public:
+    Input<Vector<Count>> in;
+    Output<Count> out;
+
+    bool compute() {
+        Count sum = 0;
+        for (unsigned i = 0; i < in.size(); ++i) {
+            sum += in[i];
+        }
+        *out = sum;
+        return true;
+    }
+};
