@@ -32,8 +32,6 @@ public:
             float y = (float)__builtin_ipu_urand32() / (float)UINT_MAX;
 #endif
 
-
-
             auto val = x * x + y * y;
             count +=  val < 1.f;
         }
