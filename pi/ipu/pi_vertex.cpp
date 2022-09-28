@@ -17,7 +17,7 @@
 
 using namespace poplar;
 
-
+// MultiVertex runs multiple (6) workers on each tile
 class PiVertex : public MultiVertex {
 
 public:

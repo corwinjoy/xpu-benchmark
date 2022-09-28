@@ -128,6 +128,8 @@ int main(int argc, char *argv[]) {
     auto counts = graph.addVariable(CountVertex, {numTiles * 6}, "counts");
      poputil::mapTensorLinearly(graph, counts);
 
+    // Each tile has 6 hardware worker threads that are scheduled in a round-robin (barrel) schedule
+    // with one instruction being executed per context in turn
     const auto NumElemsPerTile = iterations / (numTiles * 6);
     auto cs = graph.addComputeSet("loopBody");
     std::cout << "numTiles = " << numTiles << std::endl;
