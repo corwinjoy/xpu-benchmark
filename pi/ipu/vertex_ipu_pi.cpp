@@ -97,8 +97,8 @@ auto captureProfileInfo(Engine &engine) {
 
 int main(int argc, char *argv[]) {
     struct pi_options {
-        // unsigned long iterations = 196608000000; // Match GPU calculation
-        unsigned long iterations = 30000000; // Test calculation
+        unsigned long iterations = 196608000000; // Match GPU calculation
+//unsigned long iterations = 30000000; // Test calculation
         unsigned int num_ipus = 1;
         int precision = 10;
     } options;
@@ -164,6 +164,8 @@ int main(int argc, char *argv[]) {
 
 
     std::cout << "STEP 5: Create engine and compile graph" << std::endl;
+// #define IPU_PROFILE
+#ifdef IPU_PROFILE
     auto ENGINE_OPTIONS = OptionFlags{
             {"target.saveArchive",                "archive.a"},
             {"debug.instrument",                  "true"},
@@ -176,12 +178,17 @@ int main(int argc, char *argv[]) {
             {"autoReport.outputSerializedGraph",  "true"},
             {"debug.retainDebugInformation",      "true"}
     };
+#else
+    auto ENGINE_OPTIONS = OptionFlags{};
+#endif
 
     auto engine = Engine(graph, prog, ENGINE_OPTIONS);
         
     std::cout << "STEP 6: Load compiled graph onto the IPU tiles" << std::endl;
     engine.load(*device);
+#ifdef IPU_PROFILE
     engine.enableExecutionProfiling();
+#endif
 
     std::cout << "STEP 7: Attach data streams" << std::endl;
     auto results = std::vector<Count>(1);
