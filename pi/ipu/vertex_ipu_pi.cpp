@@ -16,6 +16,7 @@
 #include <poplar/Program.hpp>
 #include <poplar/Type.hpp>
 
+#include "number_with_commas.h"
 #include "count_type.h"
 auto CountVertex = ::poplar::equivalent_device_type<Count>().value;
 
@@ -96,12 +97,12 @@ auto captureProfileInfo(Engine &engine) {
 
 int main(int argc, char *argv[]) {
     struct pi_options {
-        unsigned long iterations = 30000000; // 30000000
+        // unsigned long iterations = 196608000000; // Match GPU calculation
+        unsigned long iterations = 30000000; // Test calculation
         unsigned int num_ipus = 1;
         int precision = 10;
     } options;
 
-    auto precision = options.precision;
     auto iterations = options.iterations;
 
     std::cout << "STEP 1: Connecting to an IPU device" << std::endl;
@@ -187,28 +188,41 @@ int main(int argc, char *argv[]) {
     engine.connectStream("FROM_IPU", results.data(), results.data() + results.size());
 
     std::cout << "STEP 8: Run programs" << std::endl;
-    
-    auto start = std::chrono::steady_clock::now();
-    engine.run(0, "main"); // Main program
-    auto stop = std::chrono::steady_clock::now();
-
-    std::cout << "Results size: " << results.size() << std::endl;
 
     auto hits = 0ull;
-    for (size_t i = 0; i < results.size(); i++) {
-        hits += results[i];
+    const int LOOPS = 10;
+    auto start = std::chrono::steady_clock::now();
+    for (size_t l = 0; l < LOOPS; ++l) {
+        engine.run(0, "main"); // Main program
+        for (size_t i = 0; i < results.size(); i++) {
+            hits += results[i];
+        }
     }
+    auto stop = std::chrono::steady_clock::now();
 
+    auto duration_ms = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+    double duration_s = duration_ms / pow(10, 6);
+
+    double mc_pi = 4. * hits/(iterations*LOOPS);
+    double pi_err = mc_pi - M_PI;
+
+    std::cout << "Results size: " << results.size() << std::endl;
     std::cout << "STEP 9: Capture debug and profile info" << std::endl;
     serializeGraph(graph);
     captureProfileInfo(engine);
     engine.printProfileSummary(std::cout,
                                OptionFlags{{"showExecutionSteps", "false"}});
     std::cout << std::endl;
-    std::cout << *std::max_element(results.begin(), results.end()) << std::endl;
-    std::cout << "chunk_size = " << numTiles * 6 << " repeats = " << iterations / numTiles * 6 << std::endl; 
-    std::cout << "tests = " << iterations << " took " << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << " us" << std::endl; 
-    std::cout << "pi = " << std::setprecision(precision) << (4. * hits/(iterations)) << std::endl;
+
+    typedef std::numeric_limits<double> DblLim;
+    std::cout.precision(DblLim::max_digits10);
+
+    std::cout << "chunk_size = " << numTiles * 6 << ", repeats = " << numberFormatWithCommas(iterations / numTiles * 6) << std::endl;
+    std::cout << "tests = " << numberFormatWithCommas(iterations*LOOPS) << " took " << numberFormatWithCommas(duration_ms) << " microseconds";
+    std::cout << ", or " << duration_s << " seconds" << std::endl;
+    std::cout << "PI  ~= " <<  mc_pi << std::endl;
+    std::cout << "M_PI = " <<  M_PI << std::endl;
+    std::cout << "PI err ~= " <<  pi_err << std::endl;
 
     return EXIT_SUCCESS;
 }
