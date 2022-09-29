@@ -1,0 +1,32 @@
+Results with OPT_N = 1000 on "NVIDIA GeForce RTX 3080 Laptop GPU".
+
+[/home/cjoy/src/xpu-benchmark/euro/gpu/cmake-build-debug/BlackScholes] - Starting...
+GPU Device 0: "Ampere" with compute capability 8.6
+
+Initializing data...
+...allocating CPU memory for options.
+...allocating GPU memory for options.
+...generating input data in CPU mem.
+Options count             : 2000
+BlackScholesGPU() time    : 0.033189 msec
+Effective memory bandwidth: 0.602601 GB/s
+Gigaoptions per second    : 0.060260
+
+BlackScholes, Throughput = 0.0603 GOptions/s, Time = 0.00003 s, Size = 2000 options, NumDevsUsed = 1, Workgroup = 128
+Checking the results...
+...running CPU calculations.
+
+Comparing the results...
+L1 norm: 1.577838E-07
+Max absolute error: 5.245209E-06
+
+Shutting down...
+...releasing GPU memory.
+...releasing CPU memory.
+Shutdown done.
+
+[BlackScholes] - Test Summary
+
+Test passed
+
+Process finished with exit code 0
