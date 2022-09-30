@@ -1,0 +1,132 @@
+Output from vertex_ipu_pi program.
+
+STEP 1: Connecting to an IPU device
+Trying to attach to IPU 0 - attached
+STEP 2: Create graph and compile codelets
+STEP 4: Define data streams
+STEP 3: Building the compute graph
+numTiles = 1472
+STEP 5: Create engine and compile graph
+STEP 6: Load compiled graph onto the IPU tiles
+STEP 7: Attach data streams
+STEP 8: Run programs
+Results size: 1
+STEP 9: Capture debug and profile info
+Target:
+  Number of IPUs:         1
+  Tiles per IPU:          1,472
+  Total Tiles:            1,472
+  Memory Per-Tile:        624.0 kB
+  Total Memory:           897.0 MB
+  Clock Speed (approx):   1,850.0 MHz
+  Number of Replicas:     1
+  IPUs per Replica:       1
+  Tiles per Replica:      1,472
+  Memory per Replica:     897.0 MB
+
+Graph:
+  Number of vertices:            4,419
+  Number of edges:               7,365
+  Number of variables:          57,136
+  Number of compute sets:            5
+
+Memory Usage:
+  Total for all IPUs:
+    Including Gaps:         34,265,712 B
+    Excluding Gaps:
+      By Memory Region:
+        Non-interleaved:     3,858,868 B
+        Interleaved:                 0 B
+        Overflowed:                  0 B
+      Total:                 3,858,868 B
+      By Data Type:
+        Not Overlapped
+            Variables:                               644,992 B
+            Program and Sync IDs:                          8 B
+            Internal Exchange Message Buffers:        97,100 B
+            Host Exchange Message Buffers:            94,408 B
+            Host Exchange Packet Headers:             47,744 B
+            Stack:                                   553,472 B
+            Vertex Instances:                         53,016 B
+            Control Code:                            720,664 B
+            Vertex Code:                           1,184,292 B
+            Internal Exchange Code:                   88,020 B
+            Host Exchange Code:                      213,292 B
+            Instrumentation Results:                  47,160 B
+          Total:                                   3,744,168 B
+        Overlapped
+            Variables:                               185,232 B
+            Program and Sync IDs:                      5,888 B
+            Internal Exchange Message Buffers:        44,164 B
+          Total:                                     235,284 B
+          Total After Overlapping:                   114,700 B
+      Vertex Data (53,016 B):
+        By Category:
+          Internal vertex state:         23,552 B
+          Edge pointers:                 23,568 B
+          Copy pointers:                  5,896 B
+          Padding:                            0 B
+          Descriptors:                        0 B
+        By Type:
+          poplar_rt::InstrumentationDumpStep          29,440 B
+          PiVertex                                    17,664 B
+          poplar_rt::MemsetZeroFixedSize32Bit          5,888 B
+          ReduceVertex                                    12 B
+          poplar_rt::ShortMemcpy                           8 B
+          poplar_rt::Decrement                             4 B
+      Vertex Code (942,884 B):
+        By Type:
+          poplar_rt::InstrumentationDumpStep (c++)         680,064 B
+          PiVertex (c++)                                   244,352 B
+          poplar_rt::MemsetZeroFixedSize32Bit (c++)         17,664 B
+          poplar_rt::ShortMemcpy (asm)                         688 B
+          ReduceVertex (c++)                                    92 B
+          poplar_rt::Decrement (c++)                            24 B
+
+
+  By Tile (Excluding Gaps):
+    Range (KB) Histogram (Excluding Gaps)               Count (tiles)
+        0 -  4 ****************************************  1,471
+        4 -  8                                               0
+        8 - 12                                               0
+       12 - 16                                               0
+       16 - 20                                               0
+       20 - 24                                               0
+       24 - 28                                               0
+       28 - 32                                               0
+       32 - 36                                               0
+       36 - 40                                               0
+       40 - 44                                               0
+       44 - 48                                               0
+       48 - 52                                               0
+       52 - 56                                               0
+       56 - 60                                               0
+       60 - 64                                               0
+       64 - 68                                               0
+       68 - 72                                               0
+       72 - 76 *                                             1
+
+    Maximum (Including Gaps): 103,448 (101.0 K) on tile 0
+    Maximum (Excluding Gaps): 77,352 (75.5 K) on tile 0
+    0 tile(s) out of memory
+
+Execution:
+
+Programs executed:
+
+main, main.
+
+  Total cycles:                                         5,682,556,426 (approx 3,071,652.1 microseconds)
+  Tile average compute cycles (including idle threads): 4,808,348,464.1 (84.6% of total)
+  Tile average IPU exchange cycles:                     6,998.1 (0.0% of total)
+  Tile average global exchange cycles:                  0.0 (0.0% of total)
+  Tile average host exchange cycles:                    6.5 (0.0% of total)
+  Tile average sync cycles:                             873,607,601.3 (15.4% of total)
+
+
+chunk_size = 8832, repeats = 801,391,302
+tests = 1,966,080,000,000 took 19,646,007 microseconds, or 19.64600700000000089 seconds
+PI  ~= 3.14159085969645169
+M_PI = 3.14159265358979312
+PI err ~= -0.00000179389334143
+

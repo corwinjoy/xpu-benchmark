@@ -1,0 +1,17 @@
+# docker setup to debug IPU programs via CLion
+
+docker pull graphcore/tensorflow
+
+docker run -ti -v /home/cjoy/gc_dir:/gc_dir graphcore/tensorflow bin/bash
+# in docker
+	apt-get update
+	apt-get install cmake
+	apt-get install gdb
+	exit
+
+# commit updated image
+docker ps -a
+docker commit f5b46232ca56 gc_tf_gdb # use id of your new image from ps
+
+# run new image
+docker run -ti -v /home/cjoy/gc_dir:/gc_dir gc_tf_gdb bin/bash
