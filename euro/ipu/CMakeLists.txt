@@ -1,4 +1,4 @@
-# add_definitions(-DSIMULATED_IPU)
+add_definitions(-DSIMULATED_IPU)
 
 cmake_minimum_required(VERSION 3.10)
 project(BlackScholes)
