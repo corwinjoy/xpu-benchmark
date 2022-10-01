@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
     duration_ms /= NUM_ITERATIONS;
     double duration_s = duration_ms / pow(10, 6);
 
-    std::cout << "Options Count = " << numberFormatWithCommas(OPT_N) << " took " << numberFormatWithCommas(duration_ms) << " microseconds";
+    std::cout << "Options Count = " << numberFormatWithCommas(2 * OPT_N) << " took " << numberFormatWithCommas(duration_ms) << " microseconds";
     std::cout << ", or " << duration_s << " seconds" << std::endl;
 
 

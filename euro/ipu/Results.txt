@@ -4,7 +4,7 @@ Trying to attach to IPU 0 - attached
 STEP 2: Create graph and compile codelets
 Initializing data...
 ...allocating CPU memory for options.
-Options Count = 1,000 took 270 microseconds, or 0.00027 seconds
+Options Count = 2,000 took 270 microseconds, or 0.00027 seconds
 Checking the results...
 ...running CPU calculations.
 
@@ -26,7 +26,7 @@ STEP 1: Connecting to a SIMULATED IPU device
 STEP 2: Create graph and compile codelets
 Initializing data...
 ...allocating CPU memory for options.
-Options Count = 1,000 took 77 microseconds, or 7.7e-05 seconds
+Options Count = 2S,000 took 77 microseconds, or 7.7e-05 seconds
 Checking the results...
 ...running CPU calculations.
 
