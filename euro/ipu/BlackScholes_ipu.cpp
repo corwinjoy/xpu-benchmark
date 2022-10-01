@@ -39,8 +39,10 @@
 #include <map>
 #include <random>
 #include <chrono>
+#include <optional>
 
 #include <poplar/Engine.hpp>
+#include <poplar/Graph.hpp>
 #include <poplar/IPUModel.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poplar/DeviceManager.hpp>
@@ -48,6 +50,17 @@
 #include <poplar/Type.hpp>
 
 #include "number_with_commas.h"
+
+#define DEBUG_VERTEX
+#ifdef DEBUG_VERTEX
+#include "BlackScholes_vertex.h"
+#endif
+
+using ::std::optional;
+
+using namespace poplar;
+using namespace poplar::program;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Process an array of optN options on CPU
@@ -57,10 +70,6 @@ extern "C" void BlackScholesCPU(float *h_CallResult, float *h_PutResult,
                                 float *h_OptionYears, float Riskfree,
                                 float Volatility, int optN);
 
-////////////////////////////////////////////////////////////////////////////////
-// Process an array of OptN options on GPU
-////////////////////////////////////////////////////////////////////////////////
-#include "BlackScholes_kernel.cuh"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper function, returning uniformly distributed
@@ -76,9 +85,9 @@ float RandFloat(float low, float high) {
 ////////////////////////////////////////////////////////////////////////////////
 //const int OPT_N = 4000000;
 //const int OPT_N = 6144*32;
-const int OPT_N = 1000;
-const int NUM_ITERATIONS = 512;
-
+const int OPT_N = 2;
+// const int NUM_ITERATIONS = 512;
+const int NUM_ITERATIONS = 1;
 const int OPT_SZ = OPT_N * sizeof(float);
 const float RISKFREE = 0.02f;
 const float VOLATILITY = 0.30f;
@@ -151,19 +160,16 @@ int main(int argc, char **argv) {
     //'h_' prefix - CPU (host) memory space
     float
     // Results calculated by CPU for reference
-    *h_CallResultCPU,
-            *h_PutResultCPU,
-    // CPU copy of GPU results
-    *h_CallResultGPU, *h_PutResultGPU,
+    *h_CallResultCPU, *h_PutResultCPU,
     // CPU instance of input data
     *h_StockPrice, *h_OptionStrike, *h_OptionYears;
 
-    double delta, ref, sum_delta, sum_ref, max_delta, L1norm, gpuTime;
+    double delta, ref, sum_delta, sum_ref, max_delta, L1norm;
     int i;
 
     std::cout << "STEP 1: Connecting to an IPU device" << std::endl;
 #ifdef SIMULATED_IPU
-    auto device = getIpuModel(1);  // Simulated IPU
+    auto device = getIpuModel(1, OPT_N);  // Simulated IPU
 #else
     auto device = getIpuDevice(1);
 #endif
@@ -180,15 +186,11 @@ int main(int argc, char **argv) {
     printf("...allocating CPU memory for options.\n");
     h_CallResultCPU = (float *) malloc(OPT_SZ);
     h_PutResultCPU = (float *) malloc(OPT_SZ);
-    h_CallResultGPU = (float *) malloc(OPT_SZ);
-    h_PutResultGPU = (float *) malloc(OPT_SZ);
     h_StockPrice = (float *) malloc(OPT_SZ);
     h_OptionStrike = (float *) malloc(OPT_SZ);
     h_OptionYears = (float *) malloc(OPT_SZ);
 
-
-
-    // Generate options set
+    // Generate option inputs
     srand(5347);
     for (i = 0; i < OPT_N; i++) {
         h_CallResultCPU[i] = 0.0f;
@@ -197,6 +199,20 @@ int main(int argc, char **argv) {
         h_OptionStrike[i] = RandFloat(1.0f, 100.0f);
         h_OptionYears[i] = RandFloat(0.25f, 10.0f);
     }
+
+
+#ifdef DEBUG_VERTEX
+    {
+        float cr, pr;
+        BlackScholesBodyGPU(cr, pr, h_StockPrice[0],
+                            h_OptionStrike[0], h_OptionYears[0], RISKFREE,
+                            VOLATILITY);
+        std::cout << cr << std::endl;
+        BlackScholesCPU(h_CallResultCPU, h_PutResultCPU, h_StockPrice, h_OptionStrike,
+                        h_OptionYears, RISKFREE, VOLATILITY, 1);
+        std::cout << h_CallResultCPU[0] << std::endl;
+    };
+#endif
 
     // Initialize parameter vectors
     std::vector<float> CallResult(OPT_N);
@@ -226,40 +242,81 @@ int main(int argc, char **argv) {
     poputil::mapTensorLinearly(graph, OptionStrike_t);
 
     Tensor OptionYears_t = graph.addVariable(FLOAT, {OPT_N}, "OptionYears");
-    poputil::mapTensorLinearly(graph, StockPrice_t);
+    poputil::mapTensorLinearly(graph, OptionYears_t);
 
-    // Make host params writable
-    graph.createHostWrite("StockPrice", StockPrice_t);
-    graph.createHostWrite("OptionStrike", OptionStrike_t);
-    graph.createHostWrite("OptionYears", OptionYears_t);
+    // Map input values
+    auto inStockPrice = graph.addHostToDeviceFIFO("TO_IPU_STOCK_PRICE", FLOAT, OPT_N);
+    auto inOptionStrike = graph.addHostToDeviceFIFO("TO_IPU_OPTION_STRIKE", FLOAT, OPT_N);
+    auto inOptionYears = graph.addHostToDeviceFIFO("TO_IPU_OPTION_YEARS", FLOAT, OPT_N);
+
+    // Map return values
+    auto fromIpuCallResult = graph.addDeviceToHostFIFO("FROM_IPU_CALL_RESULT", FLOAT, OPT_N);
+    auto fromIpuPutResult = graph.addDeviceToHostFIFO("FROM_IPU_PUT_RESULT", FLOAT, OPT_N);
+
+    // Create a control program that is a sequence of steps
+    Sequence prog;
+
+    ComputeSet computeSet = graph.addComputeSet("computeSet");
+    for (i = 0; i < OPT_N; ++i) {
+        VertexRef vtx = graph.addVertex(computeSet, "BlackScholesVertex");
+        graph.connect(vtx["CallResult"], CallResult_t[i]);
+        graph.connect(vtx["PutResult"], PutResult_t[i]);
+        graph.connect(vtx["StockPrice"], StockPrice_t[i]);
+        graph.connect(vtx["OptionStrike"], OptionStrike_t[i]);
+        graph.connect(vtx["OptionYears"], OptionYears_t[i]);
+
+        graph.setInitialValue(vtx["RiskFree"], RISKFREE);
+        graph.setInitialValue(vtx["Volatility"], VOLATILITY);
+        graph.setTileMapping(vtx, i);
+        graph.setPerfEstimate(vtx, 200);
+    }
+
+    // Get data in
+    prog.add(Copy(inStockPrice, CallResult_t));
+    prog.add(Copy(inOptionStrike, OptionStrike_t));
+    prog.add(Copy(inOptionYears, OptionYears_t));
+
+    // Add step to execute the compute set
+    prog.add(Execute(computeSet));
+
+    // Get data out
+    prog.add(Copy(CallResult_t, fromIpuCallResult));
+    prog.add(Copy(PutResult_t, fromIpuPutResult));
+
+#define IPU_PROFILE
+#ifdef IPU_PROFILE
+    auto ENGINE_OPTIONS = OptionFlags{
+            {"target.saveArchive",                "archive.a"},
+            {"debug.instrument",                  "true"},
+            {"debug.instrumentCompute",           "true"},
+            {"debug.loweredVarDumpFile",          "vars.capnp"},
+            {"debug.instrumentControlFlow",       "true"},
+            {"debug.computeInstrumentationLevel", "tile"},
+            {"debug.outputAllSymbols",            "true"},
+            {"autoReport.all",                    "true"},
+            {"autoReport.outputSerializedGraph",  "true"},
+            {"debug.retainDebugInformation",      "true"}
+    };
+#else
+    auto ENGINE_OPTIONS = OptionFlags{};
+#endif
+
+    auto engine = Engine(graph, prog, ENGINE_OPTIONS);
+
+    engine.load(*device);
+#ifdef IPU_PROFILE
+    engine.enableExecutionProfiling();
+#endif
+
+    engine.connectStream("TO_IPU_STOCK_PRICE", StockPrice.data());
+    engine.connectStream("TO_IPU_OPTION_STRIKE", OptionStrike.data());
+    engine.connectStream("TO_IPU_OPTION_YEARS", OptionYears.data());
+    engine.connectStream("FROM_IPU_CALL_RESULT", CallResult.data());
+    engine.connectStream("FROM_IPU_PUT_RESULT", PutResult.data());
 
     auto start = std::chrono::steady_clock::now();
     for (i = 0; i < NUM_ITERATIONS; i++) {
-        // Copy options data to IPU memory for further processing
-        engine.writeTensor("StockPrice", StockPrice.data(), StockPrice.data() + StockPrice.size());
-        engine.writeTensor("OptionStrike", OptionStrike.data(), OptionStrike.data() + OptionStrike.size());
-        engine.writeTensor("OptionYears", OptionYears.data(), OptionYears.data() + OptionYears.size());
-
-
-        // printf("Executing Black-Scholes GPU kernel (%i iterations)...\n", NUM_ITERATIONS);
-        checkCudaErrors(cudaDeviceSynchronize());
-
-
-        BlackScholesGPU<<<DIV_UP((OPT_N / 2), 128), 128 /*480, 128*/>>>(
-                (float2 *) d_CallResult, (float2 *) d_PutResult, (float2 *) d_StockPrice,
-                (float2 *) d_OptionStrike, (float2 *) d_OptionYears, RISKFREE, VOLATILITY,
-                OPT_N);
-        getLastCudaError("BlackScholesGPU() execution failed\n");
-
-
-        // printf("\nReading back GPU results...\n");
-        // Read back GPU results to compare them to CPU results
-        checkCudaErrors(cudaMemcpy(h_CallResultGPU, d_CallResult, OPT_SZ,
-                                   cudaMemcpyDeviceToHost));
-        checkCudaErrors(
-                cudaMemcpy(h_PutResultGPU, d_PutResult, OPT_SZ, cudaMemcpyDeviceToHost));
-
-        checkCudaErrors(cudaDeviceSynchronize());
+        engine.run(0);
     }
     auto stop = std::chrono::steady_clock::now();
     auto duration_ms = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
@@ -270,23 +327,11 @@ int main(int argc, char **argv) {
     std::cout << ", or " << duration_s << " seconds" << std::endl;
 
 
-    // Both call and put is calculated
-    printf("Options count             : %i     \n", 2 * OPT_N);
-    printf("BlackScholesGPU() time    : %f msec\n", gpuTime);
-    printf("Effective memory bandwidth: %f GB/s\n",
-           ((double) (5 * OPT_N * sizeof(float)) * 1E-9) / (gpuTime * 1E-3));
-    printf("Gigaoptions per second    : %f     \n\n",
-           ((double) (2 * OPT_N) * 1E-9) / (gpuTime * 1E-3));
-
-    printf(
-            "BlackScholes, Throughput = %.4f GOptions/s, Time = %.5f s, Size = %u "
-            "options, NumDevsUsed = %u, Workgroup = %u\n",
-            (((double) (2.0 * OPT_N) * 1.0E-9) / (gpuTime * 1.0E-3)), gpuTime * 1e-3,
-            (2 * OPT_N), 1, 128);
-
     printf("Checking the results...\n");
     printf("...running CPU calculations.\n\n");
     // Calculate options values on CPU
+
+
     BlackScholesCPU(h_CallResultCPU, h_PutResultCPU, h_StockPrice, h_OptionStrike,
                     h_OptionYears, RISKFREE, VOLATILITY, OPT_N);
 
@@ -299,7 +344,7 @@ int main(int argc, char **argv) {
 
     for (i = 0; i < OPT_N; i++) {
         ref = h_CallResultCPU[i];
-        delta = fabs(h_CallResultCPU[i] - h_CallResultGPU[i]);
+        delta = fabs(ref - CallResult[i]);
 
         if (delta > max_delta) {
             max_delta = delta;
@@ -314,22 +359,13 @@ int main(int argc, char **argv) {
     printf("Max absolute error: %E\n\n", max_delta);
 
     printf("Shutting down...\n");
-    printf("...releasing GPU memory.\n");
-    checkCudaErrors(cudaFree(d_OptionYears));
-    checkCudaErrors(cudaFree(d_OptionStrike));
-    checkCudaErrors(cudaFree(d_StockPrice));
-    checkCudaErrors(cudaFree(d_PutResult));
-    checkCudaErrors(cudaFree(d_CallResult));
 
     printf("...releasing CPU memory.\n");
     free(h_OptionYears);
     free(h_OptionStrike);
     free(h_StockPrice);
-    free(h_PutResultGPU);
-    free(h_CallResultGPU);
     free(h_PutResultCPU);
     free(h_CallResultCPU);
-    sdkDeleteTimer(&hTimer);
     printf("Shutdown done.\n");
 
     printf("\n[BlackScholes] - Test Summary\n");

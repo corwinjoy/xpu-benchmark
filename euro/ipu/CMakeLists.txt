@@ -1,11 +1,13 @@
 add_definitions(-DSIMULATED_IPU)
 
 cmake_minimum_required(VERSION 3.10)
-project(MonteCarloPIEstimation)
+project(BlackScholes)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include_directories(fastermath/include)
 
 if(CMAKE_COMPILER_IS_GNUCXX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -ansi -Wno-deprecated")
@@ -14,6 +16,6 @@ endif()
 
 find_package(poplar REQUIRED)
 
-add_executable(vertex_ipu_pi vertex_ipu_pi.cpp)
-target_link_libraries(vertex_ipu_pi poplar poputil popops poprand)
+add_executable(BlackScholes BlackScholes_ipu.cpp BlackScholes_cpu.cpp BlackScholes_vertex.h)
+target_link_libraries(BlackScholes poplar poputil popops poprand)
 
