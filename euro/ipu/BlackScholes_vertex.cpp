@@ -17,7 +17,7 @@ public:
     bool compute() {
         float cr, pr;
 
-        BlackScholesBodyGPU(cr, pr, StockPrice,
+        BlackScholesBodyGPU(&cr, &pr, StockPrice,
                             OptionStrike, OptionYears, RiskFree,
                             Volatility);
         *CallResult = cr;

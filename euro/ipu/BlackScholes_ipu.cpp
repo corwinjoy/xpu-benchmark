@@ -51,7 +51,7 @@
 
 #include "number_with_commas.h"
 
-#define DEBUG_VERTEX
+//#define DEBUG_VERTEX
 #ifdef DEBUG_VERTEX
 #include "BlackScholes_vertex.h"
 #endif
@@ -85,9 +85,9 @@ float RandFloat(float low, float high) {
 ////////////////////////////////////////////////////////////////////////////////
 //const int OPT_N = 4000000;
 //const int OPT_N = 6144*32;
-const int OPT_N = 2;
-// const int NUM_ITERATIONS = 512;
-const int NUM_ITERATIONS = 1;
+const int OPT_N = 1000;
+const int NUM_ITERATIONS = 512;
+// const int NUM_ITERATIONS = 1;
 const int OPT_SZ = OPT_N * sizeof(float);
 const float RISKFREE = 0.02f;
 const float VOLATILITY = 0.30f;
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
 #ifdef DEBUG_VERTEX
     {
         float cr, pr;
-        BlackScholesBodyGPU(cr, pr, h_StockPrice[0],
+        BlackScholesBodyGPU(&cr, &pr, h_StockPrice[0],
                             h_OptionStrike[0], h_OptionYears[0], RISKFREE,
                             VOLATILITY);
         std::cout << cr << std::endl;
