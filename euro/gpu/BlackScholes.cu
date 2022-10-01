@@ -31,8 +31,13 @@
  * See supplied whitepaper for more explanations.
  */
 
+#include <chrono>
+
 #include <helper_functions.h>  // helper functions for string parsing
 #include <helper_cuda.h>  // helper functions CUDA error checking and initialization
+
+#include "number_with_commas.h"
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Process an array of optN options on CPU
@@ -133,9 +138,8 @@ int main(int argc, char **argv) {
     h_OptionYears[i] = RandFloat(0.25f, 10.0f);
   }
 
-  sdkResetTimer(&hTimer);
-  sdkStartTimer(&hTimer);
 
+  auto start = std::chrono::steady_clock::now();
   for (i = 0; i < NUM_ITERATIONS; i++) {
       // printf("...copying input data to GPU mem.\n");
 
@@ -168,22 +172,16 @@ int main(int argc, char **argv) {
 
       checkCudaErrors(cudaDeviceSynchronize());
   }
-  sdkStopTimer(&hTimer);
-  gpuTime = sdkGetTimerValue(&hTimer) / NUM_ITERATIONS;
+
+  auto stop = std::chrono::steady_clock::now();
+  auto duration_ms = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+  duration_ms /= NUM_ITERATIONS;
+  double duration_s = duration_ms / pow(10, 6);
+
 
   // Both call and put is calculated
-  printf("Options count             : %i     \n", 2 * OPT_N);
-  printf("BlackScholesGPU() time    : %f msec\n", gpuTime);
-  printf("Effective memory bandwidth: %f GB/s\n",
-           ((double)(5 * OPT_N * sizeof(float)) * 1E-9) / (gpuTime * 1E-3));
-  printf("Gigaoptions per second    : %f     \n\n",
-           ((double)(2 * OPT_N) * 1E-9) / (gpuTime * 1E-3));
-
-  printf(
-            "BlackScholes, Throughput = %.4f GOptions/s, Time = %.5f s, Size = %u "
-            "options, NumDevsUsed = %u, Workgroup = %u\n",
-            (((double)(2.0 * OPT_N) * 1.0E-9) / (gpuTime * 1.0E-3)), gpuTime * 1e-3,
-            (2 * OPT_N), 1, 128);
+  std::cout << "Options Count = " << numberFormatWithCommas(2 * OPT_N) << " took " << numberFormatWithCommas(duration_ms) << " microseconds";
+  std::cout << ", or " << duration_s << " seconds" << std::endl;
 
   printf("Checking the results...\n");
   printf("...running CPU calculations.\n\n");
