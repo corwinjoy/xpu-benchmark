@@ -167,10 +167,12 @@ int main(int argc, char **argv) {
     double delta, ref, sum_delta, sum_ref, max_delta, L1norm;
     int i;
 
-    std::cout << "STEP 1: Connecting to an IPU device" << std::endl;
+
 #ifdef SIMULATED_IPU
+    std::cout << "STEP 1: Connecting to a SIMULATED IPU device" << std::endl;
     auto device = getIpuModel(1, OPT_N);  // Simulated IPU
 #else
+    std::cout << "STEP 1: Connecting to a REAL IPU device" << std::endl;
     auto device = getIpuDevice(1);
 #endif
 
@@ -283,7 +285,7 @@ int main(int argc, char **argv) {
     prog.add(Copy(CallResult_t, fromIpuCallResult));
     prog.add(Copy(PutResult_t, fromIpuPutResult));
 
-#define IPU_PROFILE
+// #define IPU_PROFILE
 #ifdef IPU_PROFILE
     auto ENGINE_OPTIONS = OptionFlags{
             {"target.saveArchive",                "archive.a"},

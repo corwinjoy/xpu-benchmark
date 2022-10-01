@@ -1,0 +1,43 @@
+#######################################################################################################
+IPU Results:
+[./BlackScholes] - Starting...
+STEP 1: STEP 1: Connecting to a REAL IPU device
+Trying to attach to IPU 0 - attached
+STEP 2: Create graph and compile codelets
+Initializing data...
+...allocating CPU memory for options.
+Options Count = 1,000 took 323 microseconds, or 0.000323 seconds
+Checking the results...
+...running CPU calculations.
+
+Comparing the results...
+L1 norm: 4.035115E-08
+Max absolute error: 1.907349E-06
+
+Shutting down...
+...releasing CPU memory.
+Shutdown done.
+
+[BlackScholes] - Test Summary
+Test passed
+
+#######################################################################################################
+Simulated IPU Results:
+STEP 1: Connecting to a SIMULATED IPU device
+STEP 2: Create graph and compile codelets
+Initializing data...
+...allocating CPU memory for options.
+Options Count = 1,000 took 75 microseconds, or 7.5e-05 seconds
+Checking the results...
+...running CPU calculations.
+
+Comparing the results...
+L1 norm: 4.004124E-08
+Max absolute error: 1.907349E-06
+
+Shutting down...
+...releasing CPU memory.
+Shutdown done.
+
+[BlackScholes] - Test Summary
+Test passed
