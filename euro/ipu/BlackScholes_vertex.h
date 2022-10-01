@@ -10,7 +10,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 // Polynomial approximation of cumulative normal distribution function
 ////////////////////////////////////////////////////////////////////////////////
-inline float cndGPU(double d) {
+inline float cndIPU(double d) {
     const double A1 = 0.31938153;
     const double A2 = -0.356563782;
     const double A3 = 1.781477937;
@@ -28,6 +28,7 @@ inline float cndGPU(double d) {
     return cnd;
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // Black-Scholes formula for both call and put
 ////////////////////////////////////////////////////////////////////////////////
@@ -43,8 +44,8 @@ inline void BlackScholesBodyGPU(float *CallResult, float *PutResult,
     double sqrtT = sqrt(T);
     double d1 = (log(S / X) + (R + 0.5 * V * V) * T) / (V * sqrtT);
     double d2 = d1 - V * sqrtT;
-    double CNDD1 = cndGPU(d1);
-    double CNDD2 = cndGPU(d2);
+    double CNDD1 = cndIPU(d1);
+    double CNDD2 = cndIPU(d2);
 
     // Calculate Call and Put simultaneously
     double expRT = exp(-R * T);

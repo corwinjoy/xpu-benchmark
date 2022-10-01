@@ -20,8 +20,10 @@ public:
         BlackScholesBodyGPU(&cr, &pr, StockPrice,
                             OptionStrike, OptionYears, RiskFree,
                             Volatility);
+
         *CallResult = cr;
         *PutResult = pr;
+
         return true;
     }
 };
