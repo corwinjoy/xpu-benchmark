@@ -60,9 +60,8 @@ float RandFloat(float low, float high) {
 ////////////////////////////////////////////////////////////////////////////////
 // Data configuration
 ////////////////////////////////////////////////////////////////////////////////
-//const int OPT_N = 4000000;
-//const int OPT_N = 6144*32;
-const int OPT_N = 200;
+const int THREADS = 32;
+const int OPT_N = 2000;
 const int NUM_ITERATIONS = 512;
 
 const int OPT_SZ = OPT_N * sizeof(float);
@@ -146,9 +145,9 @@ int main(int argc, char **argv) {
         checkCudaErrors(cudaDeviceSynchronize());
 
 
-        AmerGPU<<<DIV_UP((OPT_N / 2), 128), 16>>>(
-                (float2 *) d_CallResult, (float2 *) d_StockPrice,
-                (float2 *) d_OptionStrike, (float2 *) d_OptionYears, RISKFREE, VOLATILITY,
+        AmerGPU<<<(int)ceil((float)OPT_N/(float)THREADS), THREADS>>>(
+                d_CallResult, d_StockPrice,
+                d_OptionStrike, d_OptionYears, RISKFREE, VOLATILITY,
                 OPT_N);
         getLastCudaError("AmerGPU() execution failed\n");
 
@@ -174,7 +173,8 @@ int main(int argc, char **argv) {
 
     printf("Checking the results...\n");
     printf("...running CPU calculations.\n\n");
-    // Calculate options values on CPU
+    // Calculate european option values on CPU
+    // When stock dividend is 0.0. American Call Option = European Call Option
     BlackScholesCPU(h_CallResultCPU, h_StockPrice, h_OptionStrike,
                     h_OptionYears, RISKFREE, VOLATILITY, OPT_N);
 
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
     for (i = 0; i < OPT_N; i++) {
         cpu = h_CallResultCPU[i];
         gpu = h_CallResultGPU[i];
-        abs_pct_err = fabs((cpu - gpu)/(cpu+0.0001));
+        abs_pct_err = fabs((cpu - gpu)/fmaxf(cpu,1.0f));
 
         if (abs_pct_err > max_pct_err) {
             max_pct_err = abs_pct_err;
@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
 
     printf("\n[BlackScholes] - Test Summary\n");
 
-    if (L1norm > 1e-6) {
+    if (L1norm > 0.01f) {
         printf("Test failed!\n");
         exit(EXIT_FAILURE);
     }

@@ -34,32 +34,8 @@
 
 #include <math.h>
 
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Polynomial approximation of cumulative normal distribution function
-////////////////////////////////////////////////////////////////////////////////
-__device__ inline float cndGPU(float d) {
-  const float A1 = 0.31938153f;
-  const float A2 = -0.356563782f;
-  const float A3 = 1.781477937f;
-  const float A4 = -1.821255978f;
-  const float A5 = 1.330274429f;
-  const float RSQRT2PI = 0.39894228040143267793994605993438f;
-
-  float K = __fdividef(1.0f, (1.0f + 0.2316419f * fabsf(d)));
-
-  float cnd = RSQRT2PI * __expf(-0.5f * d * d) *
-              (K * (A1 + K * (A2 + K * (A3 + K * (A4 + K * A5)))));
-
-  if (d > 0) cnd = 1.0f - cnd;
-
-  return cnd;
-}
-
 // Function for binomial tree
 __device__ inline float Binomial(float S, float X, float R, float Q, float V, float T, char PutCall, char OpStyle) {
-    
     const unsigned int STEPS = 63;
     float OptionValue[STEPS+1];
     int i, j;
@@ -81,6 +57,7 @@ __device__ inline float Binomial(float S, float X, float R, float Q, float V, fl
         z = -1;
     }
 
+    // Initialize terminal exercise values
     for (i = 0; i <= STEPS; i++) {
         OptionValue[i] = fmaxf(z*(S*pow(u, i)*pow(d, STEPS - i) - X), 0.0);
     }
@@ -102,10 +79,8 @@ __device__ inline float Binomial(float S, float X, float R, float Q, float V, fl
     return OptionValue[0];
 }
 
-
-
 ////////////////////////////////////////////////////////////////////////////////
-// Black-Scholes formula for both call and put
+// American Call Option, priced via Binomial Tree
 ////////////////////////////////////////////////////////////////////////////////
 __device__ inline void AmerBodyGPU(float &CallResult,
                                    float S,  // Stock price
@@ -123,29 +98,18 @@ __device__ inline void AmerBodyGPU(float &CallResult,
 ////////////////////////////////////////////////////////////////////////////////
 // Process an array of optN options on GPU
 ////////////////////////////////////////////////////////////////////////////////
-__launch_bounds__(128) __global__
-    void AmerGPU(float2 *__restrict d_CallResult,
-                 float2 *__restrict d_StockPrice,
-                 float2 *__restrict d_OptionStrike,
-                 float2 *__restrict d_OptionYears, float Riskfree,
+__global__
+    void AmerGPU(float *d_CallResult,
+                 float *d_StockPrice,
+                 float *d_OptionStrike,
+                 float *d_OptionYears, float Riskfree,
                  float Volatility, int optN) {
-  ////Thread index
-  // const int      tid = blockDim.x * blockIdx.x + threadIdx.x;
-  ////Total number of threads in execution grid
-  // const int THREAD_N = blockDim.x * gridDim.x;
-
-  const int opt = blockDim.x * blockIdx.x + threadIdx.x;
-
-  // Calculating 2 options per thread to increase ILP (instruction level
-  // parallelism)
-  if (opt < (optN / 2)) {
-    float callResult1, callResult2;
-    AmerBodyGPU(callResult1, d_StockPrice[opt].x,
-                  d_OptionStrike[opt].x, d_OptionYears[opt].x, Riskfree,
+  const int tid = blockDim.x * blockIdx.x + threadIdx.x; //Thread index
+  if (tid < optN) {
+      float callResult;
+      AmerBodyGPU(callResult, d_StockPrice[tid],
+                  d_OptionStrike[tid], d_OptionYears[tid], Riskfree,
                   Volatility);
-    AmerBodyGPU(callResult2, d_StockPrice[opt].y,
-                  d_OptionStrike[opt].y, d_OptionYears[opt].y, Riskfree,
-                  Volatility);
-    d_CallResult[opt] = make_float2(callResult1, callResult2);
+      d_CallResult[tid] = callResult;
   }
 }
