@@ -53,7 +53,7 @@
 
 // #define DEBUG_VERTEX
 #ifdef DEBUG_VERTEX
-#include "BlackScholes_vertex.h"
+#include "American_vertex.h"
 #endif
 
 using ::std::optional;
@@ -65,7 +65,7 @@ using namespace poplar::program;
 ////////////////////////////////////////////////////////////////////////////////
 // Process an array of optN options on CPU
 ////////////////////////////////////////////////////////////////////////////////
-extern "C" void BlackScholesCPU(float *h_CallResult, float *h_PutResult,
+extern "C" void BlackScholesCPU(float *h_CallResult,
                                 float *h_StockPrice, float *h_OptionStrike,
                                 float *h_OptionYears, float Riskfree,
                                 float Volatility, int optN);
@@ -160,11 +160,11 @@ int main(int argc, char **argv) {
     //'h_' prefix - CPU (host) memory space
     float
     // Results calculated by CPU for reference
-    *h_CallResultCPU, *h_PutResultCPU,
+    *h_CallResultCPU,
     // CPU instance of input data
     *h_StockPrice, *h_OptionStrike, *h_OptionYears;
 
-    double delta, ref, sum_delta, sum_ref, max_delta, L1norm;
+    double abs_pct_err, cpu, ipu, sum_pct_err, sum_cpu, max_pct_err, L1norm;
     int i;
 
 
@@ -187,7 +187,6 @@ int main(int argc, char **argv) {
     printf("Initializing data...\n");
     printf("...allocating CPU memory for options.\n");
     h_CallResultCPU = (float *) malloc(OPT_SZ);
-    h_PutResultCPU = (float *) malloc(OPT_SZ);
     h_StockPrice = (float *) malloc(OPT_SZ);
     h_OptionStrike = (float *) malloc(OPT_SZ);
     h_OptionYears = (float *) malloc(OPT_SZ);
@@ -196,7 +195,6 @@ int main(int argc, char **argv) {
     srand(5347);
     for (i = 0; i < OPT_N; i++) {
         h_CallResultCPU[i] = 0.0f;
-        h_PutResultCPU[i] = -1.0f;
         h_StockPrice[i] = RandFloat(5.0f, 30.0f);
         h_OptionStrike[i] = RandFloat(1.0f, 100.0f);
         h_OptionYears[i] = RandFloat(0.25f, 10.0f);
@@ -205,12 +203,12 @@ int main(int argc, char **argv) {
 
 #ifdef DEBUG_VERTEX
     {
-        float cr, pr;
-        BlackScholesBodyGPU(&cr, &pr, h_StockPrice[0],
+        float cr;
+        AmerBodyIPU(&cr, h_StockPrice[0],
                             h_OptionStrike[0], h_OptionYears[0], RISKFREE,
                             VOLATILITY);
         std::cout << cr << std::endl;
-        BlackScholesCPU(h_CallResultCPU, h_PutResultCPU, h_StockPrice, h_OptionStrike,
+        BlackScholesCPU(h_CallResultCPU, h_StockPrice, h_OptionStrike,
                         h_OptionYears, RISKFREE, VOLATILITY, 1);
         std::cout << h_CallResultCPU[0] << std::endl;
     };
@@ -218,14 +216,12 @@ int main(int argc, char **argv) {
 
     // Initialize parameter vectors
     std::vector<float> CallResult(OPT_N);
-    std::vector<float> PutResult(OPT_N);
     std::vector<float> StockPrice(OPT_N);
     std::vector<float> OptionStrike(OPT_N);
     std::vector<float> OptionYears(OPT_N);
 
     // Copy CPU data to vectors
     CallResult.assign(h_CallResultCPU, h_CallResultCPU + OPT_N);
-    PutResult.assign(h_PutResultCPU, h_PutResultCPU + OPT_N);
     StockPrice.assign(h_StockPrice, h_StockPrice + OPT_N);
     OptionStrike.assign(h_OptionStrike, h_OptionStrike + OPT_N);
     OptionYears.assign(h_OptionYears, h_OptionYears + OPT_N);
@@ -233,9 +229,6 @@ int main(int argc, char **argv) {
     // Create tensors in the graph.
     Tensor CallResult_t = graph.addVariable(FLOAT, {OPT_N}, "CallResult");
     poputil::mapTensorLinearly(graph, CallResult_t);
-
-    Tensor PutResult_t = graph.addVariable(FLOAT, {OPT_N}, "PutResult");
-    poputil::mapTensorLinearly(graph, PutResult_t);
 
     Tensor StockPrice_t = graph.addVariable(FLOAT, {OPT_N}, "StockPrice");
     poputil::mapTensorLinearly(graph, StockPrice_t);
@@ -253,16 +246,14 @@ int main(int argc, char **argv) {
 
     // Map return values
     auto fromIpuCallResult = graph.addDeviceToHostFIFO("FROM_IPU_CALL_RESULT", FLOAT, OPT_N);
-    auto fromIpuPutResult = graph.addDeviceToHostFIFO("FROM_IPU_PUT_RESULT", FLOAT, OPT_N);
 
     // Create a control program that is a sequence of steps
     Sequence prog;
 
     ComputeSet computeSet = graph.addComputeSet("computeSet");
     for (i = 0; i < OPT_N; ++i) {
-        VertexRef vtx = graph.addVertex(computeSet, "BlackScholesVertex");
+        VertexRef vtx = graph.addVertex(computeSet, "AmericanVertex");
         graph.connect(vtx["CallResult"], CallResult_t[i]);
-        graph.connect(vtx["PutResult"], PutResult_t[i]);
         graph.connect(vtx["StockPrice"], StockPrice_t[i]);
         graph.connect(vtx["OptionStrike"], OptionStrike_t[i]);
         graph.connect(vtx["OptionYears"], OptionYears_t[i]);
@@ -283,7 +274,6 @@ int main(int argc, char **argv) {
 
     // Get data out
     prog.add(Copy(CallResult_t, fromIpuCallResult));
-    prog.add(Copy(PutResult_t, fromIpuPutResult));
 
 // #define IPU_PROFILE
 #ifdef IPU_PROFILE
@@ -314,7 +304,6 @@ int main(int argc, char **argv) {
     engine.connectStream("TO_IPU_OPTION_STRIKE", OptionStrike.data());
     engine.connectStream("TO_IPU_OPTION_YEARS", OptionYears.data());
     engine.connectStream("FROM_IPU_CALL_RESULT", CallResult.data());
-    engine.connectStream("FROM_IPU_PUT_RESULT", PutResult.data());
 
     auto start = std::chrono::steady_clock::now();
     for (i = 0; i < NUM_ITERATIONS; i++) {
@@ -325,40 +314,40 @@ int main(int argc, char **argv) {
     duration_ms /= NUM_ITERATIONS;
     double duration_s = duration_ms / pow(10, 6);
 
-    std::cout << "Options Count = " << numberFormatWithCommas(2 * OPT_N) << " took " << numberFormatWithCommas(duration_ms) << " microseconds";
+    std::cout << "Options Count = " << numberFormatWithCommas(OPT_N) << " took " << numberFormatWithCommas(duration_ms) << " microseconds";
     std::cout << ", or " << duration_s << " seconds" << std::endl;
-
 
     printf("Checking the results...\n");
     printf("...running CPU calculations.\n\n");
+
     // Calculate options values on CPU
-
-
-    BlackScholesCPU(h_CallResultCPU, h_PutResultCPU, h_StockPrice, h_OptionStrike,
+    BlackScholesCPU(h_CallResultCPU, h_StockPrice, h_OptionStrike,
                     h_OptionYears, RISKFREE, VOLATILITY, OPT_N);
 
     printf("Comparing the results...\n");
+
     // Calculate max absolute difference and L1 distance
     // between CPU and GPU results
-    sum_delta = 0;
-    sum_ref = 0;
-    max_delta = 0;
+    sum_pct_err = 0;
+    sum_cpu = 0;
+    max_pct_err = 0;
 
     for (i = 0; i < OPT_N; i++) {
-        ref = h_CallResultCPU[i];
-        delta = fabs(ref - CallResult[i]);
+        cpu = h_CallResultCPU[i];
+        ipu = CallResult[i];
+        abs_pct_err = fabs((cpu - ipu) / fmaxf(cpu, 1.0f));
 
-        if (delta > max_delta) {
-            max_delta = delta;
+        if (abs_pct_err > max_pct_err) {
+            max_pct_err = abs_pct_err;
         }
 
-        sum_delta += delta;
-        sum_ref += fabs(ref);
+        sum_pct_err += abs_pct_err;
+        sum_cpu += fabs(cpu);
     }
 
-    L1norm = sum_delta / sum_ref;
+    L1norm = sum_pct_err / (double)OPT_N;
     printf("L1 norm: %E\n", L1norm);
-    printf("Max absolute error: %E\n\n", max_delta);
+    printf("Max absolute pct error: %E\n\n", max_pct_err);
 
     printf("Shutting down...\n");
 
@@ -366,13 +355,12 @@ int main(int argc, char **argv) {
     free(h_OptionYears);
     free(h_OptionStrike);
     free(h_StockPrice);
-    free(h_PutResultCPU);
     free(h_CallResultCPU);
     printf("Shutdown done.\n");
 
     printf("\n[BlackScholes] - Test Summary\n");
 
-    if (L1norm > 1e-6) {
+    if (L1norm > 1e-2) {
         printf("Test failed!\n");
         exit(EXIT_FAILURE);
     }

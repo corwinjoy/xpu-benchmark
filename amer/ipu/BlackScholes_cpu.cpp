@@ -51,7 +51,7 @@ static double CND(double d) {
 ////////////////////////////////////////////////////////////////////////////////
 // Black-Scholes formula for both call and put
 ////////////////////////////////////////////////////////////////////////////////
-static void BlackScholesBodyCPU(float &callResult, float &putResult,
+static void BlackScholesBodyCPU(float &callResult,
                                 float Sf,  // Stock price
                                 float Xf,  // Option strike
                                 float Tf,  // Option years
@@ -69,18 +69,17 @@ static void BlackScholesBodyCPU(float &callResult, float &putResult,
   // Calculate Call and Put simultaneously
   double expRT = exp(-R * T);
   callResult = (float)(S * CNDD1 - X * expRT * CNDD2);
-  putResult = (float)(X * expRT * (1.0 - CNDD2) - S * (1.0 - CNDD1));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Process an array of optN options
 ////////////////////////////////////////////////////////////////////////////////
-extern "C" void BlackScholesCPU(float *h_CallResult, float *h_PutResult,
+extern "C" void BlackScholesCPU(float *h_CallResult,
                                 float *h_StockPrice, float *h_OptionStrike,
                                 float *h_OptionYears, float Riskfree,
                                 float Volatility, int optN) {
   for (int opt = 0; opt < optN; opt++)
-    BlackScholesBodyCPU(h_CallResult[opt], h_PutResult[opt], h_StockPrice[opt],
+    BlackScholesBodyCPU(h_CallResult[opt], h_StockPrice[opt],
                         h_OptionStrike[opt], h_OptionYears[opt], Riskfree,
                         Volatility);
 }

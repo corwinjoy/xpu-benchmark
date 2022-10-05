@@ -5,50 +5,65 @@
 #pragma once
 #include <climits>
 #include <math.h>
-// #include <ipudef.h>
 
-////////////////////////////////////////////////////////////////////////////////
-// Polynomial approximation of cumulative normal distribution function
-////////////////////////////////////////////////////////////////////////////////
-inline float cndIPU(double d) {
-    const double A1 = 0.31938153;
-    const double A2 = -0.356563782;
-    const double A3 = 1.781477937;
-    const double A4 = -1.821255978;
-    const double A5 = 1.330274429;
-    const double RSQRT2PI = 0.39894228040143267793994605993438;
+// Function for binomial tree
+inline float Binomial(float S, float X, float R, float Q, float V, float T, char PutCall, char OpStyle) {
+    const int STEPS = 63;
+    float OptionValue[STEPS+1];
+    int i, j;
+    float dt, u, d, p;
+    int z;
 
-    double K = 1.0 / (1.0 + 0.2316419 * fabs(d));
+    // Quantities for the tree
+    dt = T / STEPS;
+    u = exp(V * sqrt(dt));
+    d = 1.0 / u;
+    p = (exp((R - Q) * dt) - d) / (u - d);
 
-    double cnd = RSQRT2PI * exp(-0.5 * d * d) *
-                 (K * (A1 + K * (A2 + K * (A3 + K * (A4 + K * A5)))));
+    if (PutCall == 'C')
+    {
+        z = 1;
+    }
+    else if (PutCall == 'P')
+    {
+        z = -1;
+    }
 
-    if (d > 0.0) cnd = 1.0 - cnd;
+    // Initialize terminal exercise values
+    for (i = 0; i <= STEPS; i++) {
+        OptionValue[i] = fmaxf(z*(S*pow(u, i)*pow(d, STEPS - i) - X), 0.0);
+    }
 
-    return cnd;
+    // Backward recursion through the tree
+    for (j = STEPS - 1; j >= 0; j--) {
+        for (i = 0; i <= j; i++) {
+            if (OpStyle == 'E')
+                OptionValue[i] = exp(-R * dt) * (p * (OptionValue[i + 1]) + (1.0 - p) * (OptionValue[i]));
+            else {
+                float CurrentExercise = z*(S*pow(u, i)*pow(d, j - i) - X);
+                float FutureExercise = exp(-R * dt) * (p * (OptionValue[i + 1]) + (1.0 - p) * (OptionValue[i]));
+                OptionValue[i] = fmaxf(CurrentExercise, FutureExercise);
+            }
+        }
+    }
+
+    // Return the option price
+    return OptionValue[0];
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
-// Black-Scholes formula for both call and put
+// American Call Option, priced via Binomial Tree
 ////////////////////////////////////////////////////////////////////////////////
-inline void BlackScholesBodyGPU(float *CallResult, float *PutResult,
-                                float Sf,  // Stock price
-                                float Xf,  // Option strike
-                                float Tf,  // Option years
-                                float Rf,  // Riskless rate
-                                float Vf  // Volatility rate
+inline void AmerBodyIPU(float *CallResult,
+                                   float S,  // Stock price
+                                   float X,  // Option strike
+                                   float T,  // Option years
+                                   float R,  // Riskless rate
+                                   float V  // Volatility rate
 ) {
-    double S = Sf, X = Xf, T = Tf, R = Rf, V = Vf;
+    const char PutCall = 'C';
+    const char OpStyle = 'A';
 
-    double sqrtT = sqrt(T);
-    double d1 = (log(S / X) + (R + 0.5 * V * V) * T) / (V * sqrtT);
-    double d2 = d1 - V * sqrtT;
-    double CNDD1 = cndIPU(d1);
-    double CNDD2 = cndIPU(d2);
-
-    // Calculate Call and Put simultaneously
-    double expRT = exp(-R * T);
-    *CallResult = (float)(S * CNDD1 - X * expRT * CNDD2);
-    *PutResult = (float)(X * expRT * (1.0 - CNDD2) - S * (1.0 - CNDD1));
+    *CallResult = Binomial(S, X, R, 0.0, V, T, PutCall, OpStyle);
 }
+

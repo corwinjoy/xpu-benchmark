@@ -8,21 +8,20 @@ using namespace poplar;
 ////////////////////////////////////////////////////////////////////////////////
 // Vertex to price option
 ////////////////////////////////////////////////////////////////////////////////
-class BlackScholesVertex : public Vertex {
+class AmericanVertex : public Vertex {
 public:
     Input<float> StockPrice, OptionStrike, OptionYears;
-    Output<float> CallResult, PutResult;
+    Output<float> CallResult;
     float RiskFree, Volatility;
 
     bool compute() {
-        float cr, pr;
+        float cr;
 
-        BlackScholesBodyGPU(&cr, &pr, StockPrice,
+        AmerBodyIPU(&cr, StockPrice,
                             OptionStrike, OptionYears, RiskFree,
                             Volatility);
 
         *CallResult = cr;
-        *PutResult = pr;
 
         return true;
     }
