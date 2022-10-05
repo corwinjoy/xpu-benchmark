@@ -7,12 +7,12 @@ Initializing data...
 ...allocating CPU memory for options.
 ...allocating GPU memory for options.
 ...generating input data in CPU mem.
-Options Count = 2,000 took 10,316 microseconds, or 0.010316 seconds
+Options Count = 1,000 took 9,200 microseconds, or 0.0092 seconds
 Checking the results...
 ...running CPU calculations.
 
 Comparing the results...
-L1 norm: 3.720352E-03
+L1 norm: 3.753267E-03
 Max absolute pct error: 3.280525E-02
 
 Shutting down...
