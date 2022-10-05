@@ -1,5 +1,24 @@
 #######################################################################################################
+[./American] - Starting...
 STEP 1: Connecting to a REAL IPU device
+Trying to attach to IPU 0 - attached
+STEP 2: Create graph and compile codelets
+Initializing data...
+...allocating CPU memory for options.
+Options Count = 1,000 took 8,395 microseconds, or 0.008395 seconds
+Checking the results...
+...running CPU calculations.
+
+Comparing the results...
+L1 norm: 3.754123E-03
+Max absolute pct error: 3.280525E-02
+
+Shutting down...
+...releasing CPU memory.
+Shutdown done.
+
+[BlackScholes] - Test Summary
+Test passed
 
 
 #######################################################################################################
