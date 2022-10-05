@@ -218,7 +218,7 @@ int main(int argc, char **argv) {
     sdkDeleteTimer(&hTimer);
     printf("Shutdown done.\n");
 
-    printf("\n[BlackScholes] - Test Summary\n");
+    printf("\n[American Option] - Test Summary\n");
 
     if (L1norm > 0.01f) {
         printf("Test failed!\n");
